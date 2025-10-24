@@ -2,12 +2,6 @@ dependencies:
 - name: opentelemetry-collector
   repository: https://open-telemetry.github.io/opentelemetry-helm-charts
   version: 0.130.1
-- name: opentelemetry-collector
-  repository: https://open-telemetry.github.io/opentelemetry-helm-charts
-  version: 0.130.1
-- name: opentelemetry-collector
-  repository: https://open-telemetry.github.io/opentelemetry-helm-charts
-  version: 0.130.1
 - name: jaeger
   repository: ""
   version: 4.0.0
@@ -23,11 +17,14 @@ dependencies:
 - name: loki
   repository: https://grafana.github.io/helm-charts
   version: 6.33.0
+- name: opensearch
+  repository: https://opensearch-project.github.io/helm-charts/
+  version: 2.31.0
 - name: postgresql
   repository: https://charts.bitnami.com/bitnami
   version: 16.7.21
 - name: kube-state-metrics
   repository: https://prometheus-community.github.io/helm-charts
   version: 6.1.4
-digest: sha256:1b63f9ff6b5d475f796a9a05e76abd6aed92f0cfbf4e99e81fd1df0a80527f24
-generated: "2025-08-20T11:05:40.201797-05:00"
+digest: sha256:bde2ca0f1d5885959c0664321c2bd979e039169de6a64b195e518406d61d71eb
+generated: "2025-10-20T12:01:57.689345684-07:00"

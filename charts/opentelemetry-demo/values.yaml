@@ -1,3 +1,4 @@
+
 # yaml-language-server: $schema=./values.schema.json
 default:
   # List of environment variables applied to all components
@@ -165,6 +166,12 @@ components:
         value: kafka:9092
       - name: OTEL_EXPORTER_OTLP_ENDPOINT
         value: http://$(OTEL_COLLECTOR_NAME):4318
+      - name: OTEL_LOGS_EXPORTER
+        value: otlp
+      - name: OTEL_DOTNET_AUTO_LOGS_ENABLED
+        value: "true"
+      - name: OTEL_EXPORTER_OTLP_PROTOCOL
+        value: http/protobuf
       - name: DB_CONNECTION_STRING
         value: "Host=postgresql;Username=otelu;Password=otelp;Database=otel;Pooling=false;"
       - name: OTEL_DOTNET_AUTO_TRACES_ENTITYFRAMEWORKCORE_INSTRUMENTATION_ENABLED
@@ -291,7 +298,11 @@ components:
       - name: FLAGD_PORT
         value: "8013"
       - name: OTEL_EXPORTER_OTLP_ENDPOINT
-        value: http://$(OTEL_COLLECTOR_NAME):4317
+        value: http://$(OTEL_COLLECTOR_NAME):4318
+      - name: OTEL_EXPORTER_OTLP_PROTOCOL
+        value: http/protobuf
+      - name: OTEL_LOGS_EXPORTER
+        value: otlp
     resources:
       limits:
         memory: 128Mi
@@ -669,7 +680,11 @@ components:
       - name: QUOTE_ADDR
         value: http://quote:8080
       - name: OTEL_EXPORTER_OTLP_ENDPOINT
-        value: http://$(OTEL_COLLECTOR_NAME):4317
+        value: http://$(OTEL_COLLECTOR_NAME):4318
+      - name: OTEL_EXPORTER_OTLP_PROTOCOL
+        value: http/protobuf
+      - name: OTEL_LOGS_EXPORTER
+        value: otlp
     resources:
       limits:
         memory: 20Mi
@@ -799,8 +814,8 @@ components:
     useDefault:
       env: false
     imageOverride:
-      repository: thouqueerahmedml/otel-demo
-      tag: "latest-jaeger-mcp"
+      repository: sandeshgowdasg29/jaeger-mcp
+      tag: "latest"          
     service:
       port: 8000
       type: LoadBalancer
@@ -822,6 +837,29 @@ components:
         memory: 512Mi
       requests:
         memory: 512Mi
+
+
+  opensearch-mcp-server:
+    enabled: true
+    useDefault:
+      env: false
+    imageOverride:
+      repository: sandeshgowdasg29/opensearch
+      tag: latest
+    command: ["elasticsearch-core-mcp-server", "http", "--address", "0.0.0.0:8000"]
+    service:
+      port: 8000
+      type: LoadBalancer
+    env:
+      - name: ELASTICSEARCH_URL
+        value: "http://opensearch-cluster-master.otel-demo-os.svc.cluster.local:9200"
+      - name: ES_URL
+        value: "http://opensearch-cluster-master.otel-demo-os.svc.cluster.local:9200"
+      - name: HOST
+        value: "0.0.0.0"
+      - name: PORT
+        value: "8000"
+
 
   db-connection-exhauster:
     enabled: true
@@ -938,10 +976,14 @@ apps-otel-collector:
         endpoint: http://prometheus:9090/api/v1/otlp
         tls:
           insecure: true
-      otlphttp/loki:
-        endpoint: http://loki:3100/otlp
-        tls:
-          insecure: true
+      opensearch:
+        http:
+          endpoint: http://opensearch-cluster-master:9200
+          tls:
+            insecure: true
+        logs_index: otel-logs
+      
+
 
     processors:
       # This processor is used to help limit high cardinality on next.js span names
@@ -990,12 +1032,14 @@ apps-otel-collector:
           exporters:
             - otlphttp/prometheus
         logs:
+          receivers:
+            - otlp
           processors:
             - memory_limiter
             - resource
             - batch
           exporters:
-            - otlphttp/loki
+            - opensearch
 
 k8s-cluster-otel-collector:
   enabled: true
@@ -1062,10 +1106,12 @@ k8s-cluster-otel-collector:
         endpoint: http://prometheus:9090/api/v1/otlp
         tls:
           insecure: true
-      otlphttp/loki:
-        endpoint: http://loki:3100/otlp
-        tls:
-          insecure: true
+      opensearch:
+        http:
+          endpoint: http://opensearch-cluster-master:9200
+          tls:
+            insecure: true
+        logs_index: otel-logs
 
     connectors:
       spanmetrics: {}
@@ -1089,11 +1135,13 @@ k8s-cluster-otel-collector:
           exporters:
             - otlphttp/prometheus
         logs:
+          receivers:
+            - otlp
           processors:
             - memory_limiter
             - batch
           exporters:
-            - otlphttp/loki
+            - opensearch
 
 k8s-nodes-otel-collector:
   enabled: true
@@ -1140,10 +1188,12 @@ k8s-nodes-otel-collector:
         endpoint: http://prometheus:9090/api/v1/otlp
         tls:
           insecure: true
-      otlphttp/loki:
-        endpoint: http://loki:3100/otlp
-        tls:
-          insecure: true
+      opensearch:
+        http:
+          endpoint: http://opensearch-cluster-master:9200
+          tls:
+            insecure: true
+        logs_index: otel-logs
 
     connectors:
       spanmetrics: {}
@@ -1165,11 +1215,13 @@ k8s-nodes-otel-collector:
           exporters:
             - otlphttp/prometheus
         logs:
+          receivers:
+            - otlp
           processors:
             - memory_limiter
             - batch
           exporters:
-            - otlphttp/loki
+            - opensearch
 
 jaeger:
   enabled: true
@@ -1610,11 +1662,39 @@ prometheus:
           scrape_timeout: 30s
 
 opensearch:
-  enabled: false
+  # enabled: false
+  enabled: true
+  replicas: 1
+  sysctlVmMaxMapCount: 262144
+  sysctlInit:
+    enabled: true
+  extraEnvs:
+    - name: OPENSEARCH_INITIAL_ADMIN_PASSWORD
+      value: "MyStr0ng!Pass@2025"
+    - name: DISABLE_SECURITY_PLUGIN
+      value: "true"
+  master:
+    persistence:
+      enabled: true
+      size: 10Gi
+  data:
+    replicaCount: 0
+  coordinating:
+    replicaCount: 0
+  ingest:
+    replicaCount: 0
+  clusterConfig:
+    cluster.initial_master_nodes: "opensearch-cluster-master-0"
+    discovery.seed_hosts: "opensearch-cluster-master-headless"
+    discovery.type: "single-node"
+    bootstrap.memory_lock: "false"
+    bootstrap.system_call_filter: "false"
+  
 
 loki:
-  enabled: true
-  fullnameOverride: loki
+  # enabled: true
+  enabled: false
+  # fullnameOverride: loki
   deploymentMode: SingleBinary
   singleBinary:
     replicas: 1
@@ -1697,6 +1777,9 @@ loki:
 postgresql:
   enabled: true
   fullnameOverride: postgresql
+  image:
+    registry: docker.io
+    repository: bitnamilegacy/postgresql
   auth:
     username: otelu
     password: otelp
@@ -1790,13 +1873,18 @@ grafana:
           url: http://jaeger-query:80
           editable: true
           isDefault: false
-        - name: Loki
+        - name: OpenSearch Logs
           uid: webstore-logs
-          type: loki
-          url: http://loki:3100
+          type: elasticsearch
+          url: http://opensearch-cluster-master:9200
           access: proxy
           editable: true
           isDefault: false
+          database: otel-logs
+          jsonData:
+            timeField: "@timestamp"
+            logMessageField: "body"
+            logLevelField: "severity_number"
   dashboardProviders:
     dashboardproviders.yaml:
       apiVersion: 1
